@@ -32,4 +32,4 @@ jobs:
         run: |
           cp /just-a-sheet/.env .env
           docker compose -f docker-compose.yml build importer
-          docker compose -f docker-compose.yml run --rm importer uv run just-a-sheet once --dry-run
+          docker compose -f docker-compose.yml run --rm importer just-a-sheet once --dry-run

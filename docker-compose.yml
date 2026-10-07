@@ -8,6 +8,10 @@ services:
     build:
       context: .
       target: production       # estágio sem deps de dev, código imutável, non-root
+      args:
+        # UID/GID do usuário `ubuntu` no servidor, dono de /just-a-sheet (chmod 600).
+        APP_UID: "1001"
+        APP_GID: "1001"
     env_file: .env             # SPREADSHEET_ID, DRIVE_FOLDER_ID, LLM_API_KEY etc.
     volumes:
       # Conta de serviço do Google, somente leitura, fora do repositório.

@@ -27,8 +27,15 @@ COPY just_a_sheet ./just_a_sheet
 RUN uv sync --frozen --no-dev
 # Cria um usuário sem privilégios e entrega a ele o código e o venv.
 # Rodar como root em produção é uma superfície de ataque desnecessária.
-RUN useradd --create-home appuser \
+# UID/GID iguais aos do dono de /just-a-sheet no servidor: assim o container lê a
+# credencial montada com chmod 600 (o docker-compose.yml passa os valores).
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd --gid ${APP_GID} appuser \
+    && useradd --create-home --uid ${APP_UID} --gid ${APP_GID} appuser \
     && chown -R appuser:appuser /app
 USER appuser
+# Executa direto do venv: `uv run` sincronizaria o grupo dev a cada execução.
+ENV PATH="/app/.venv/bin:${PATH}"
 # CMD padrão — loop infinito de importação.
-CMD ["uv", "run", "just-a-sheet", "run"]
+CMD ["just-a-sheet", "run"]
