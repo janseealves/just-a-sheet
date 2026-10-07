@@ -1,0 +1,9 @@
+.git
+.env
+samples/
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache
+service-account*.json
+*-sa.json

@@ -1,0 +1,20 @@
+name: Deploy · Production
+run-name: Deploy to production by @${{ github.actor }}
+on:
+  push:
+    branches:
+      - prd
+concurrency:
+  group: production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: [self-hosted, linux, ARM64, just-a-sheet]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build & restart
+        run: |
+          cp /just-a-sheet/.env .env
+          docker compose -f docker-compose.yml up -d --build --remove-orphans
+          docker image prune -f

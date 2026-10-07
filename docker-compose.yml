@@ -1,0 +1,20 @@
+name: just-a-sheet
+
+# Deploy: docker compose -f docker-compose.yml up -d --build
+# (o workflow deploy.yml faz isso quando há push na branch `prd`).
+
+services:
+  importer:
+    build:
+      context: .
+      target: production       # estágio sem deps de dev, código imutável, non-root
+    env_file: .env             # SPREADSHEET_ID, DRIVE_FOLDER_ID, LLM_API_KEY etc.
+    volumes:
+      # Conta de serviço do Google, somente leitura, fora do repositório.
+      - /just-a-sheet/service-account.json:/run/secrets/google-sa.json:ro
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

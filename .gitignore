@@ -1,0 +1,18 @@
+# Segredos e credenciais — NUNCA versionar (repositório público)
+.env
+service-account*.json
+*-sa.json
+*credentials*.json
+
+# Arquivos reais do banco para depuração local
+samples/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
