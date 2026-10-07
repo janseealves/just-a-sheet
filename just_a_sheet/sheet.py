@@ -21,7 +21,7 @@ from just_a_sheet.models import (
 )
 
 ESCOPOS = [
-    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 ABA_LANCAMENTOS = "Lançamentos"

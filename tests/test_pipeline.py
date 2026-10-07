@@ -299,3 +299,112 @@ def test_arquivo_sem_md5_processado_se_id_ja_registrado():
     planilha = FakePlanilha(processados={("id-nativo", "qualquer")})
     assert Pipeline(planilha, drive, FakeLLM(), agora=lambda: AGORA).ciclo() == []
     assert drive.baixados == [] and planilha.importacoes == []
+
+
+# ------------------------------------------------------------- arquivamento
+
+
+class FakeDriveArquivo(FakeDrive):
+    def __init__(self, arquivos, falha_mover=None, falha_pasta=None):
+        super().__init__(arquivos)
+        self.pastas: list[str] = []
+        self.movidos: list[tuple[str, str]] = []
+        self.falha_mover = falha_mover
+        self.falha_pasta = falha_pasta
+
+    def pasta_do_mes(self, nome):
+        if self.falha_pasta:
+            raise self.falha_pasta
+        self.pastas.append(nome)
+        return f"pasta-{nome}"
+
+    def mover(self, file_id, destino_id):
+        if self.falha_mover:
+            raise self.falha_mover
+        self.movidos.append((file_id, destino_id))
+
+
+def _pipe_arquivo(planilha, arquivos, arquivar=True, **falhas):
+    drive = FakeDriveArquivo(arquivos, **falhas)
+    pipe = Pipeline(planilha, drive, FakeLLM(), agora=lambda: AGORA, arquivar=arquivar)
+    return pipe, drive
+
+
+def test_move_quando_ok(csv_nubank):
+    nome = "nubank_2026-02-16.csv"
+    pipe, drive = _pipe_arquivo(FakePlanilha(), {nome: csv_nubank})
+    [res] = pipe.ciclo()
+    assert res.status == "ok" and res.erro == ""
+    assert drive.movidos == [(f"id-{nome}", "pasta-2026-02")]
+
+
+def test_nao_move_ignorado_e_erro():
+    arquivos = {
+        "extrato.csv": b"Extrato de: Ag: 0;Conta: 0\n1;2\n",
+        "quebrado.pdf": _pdf_bradesco(saldo="900,00"),
+    }
+    pipe, drive = _pipe_arquivo(FakePlanilha(), arquivos)
+    resultados = pipe.ciclo()
+    assert {r.status for r in resultados} == {"ignorado", "erro"}
+    assert drive.movidos == [] and drive.pastas == []
+
+
+def test_nao_move_no_dry_run(csv_nubank):
+    nome = "nubank_2026-02-16.csv"
+    pipe, drive = _pipe_arquivo(FakePlanilha(), {nome: csv_nubank})
+    [res] = pipe.ciclo(dry_run=True)
+    assert res.arquivaria_em == "files/2026-02"
+    assert drive.movidos == [] and drive.pastas == []
+
+
+def test_sem_archive_folder_nao_arquiva(csv_nubank):
+    nome = "nubank_2026-02-16.csv"
+    pipe, drive = _pipe_arquivo(FakePlanilha(), {nome: csv_nubank}, arquivar=False)
+    [res] = pipe.ciclo()
+    assert res.status == "ok" and res.arquivaria_em == ""
+    assert drive.movidos == [] and drive.pastas == []
+
+
+def test_escolhe_mes_mais_frequente(csv_nubank, monkeypatch):
+    from just_a_sheet import pipeline as mod
+
+    original = mod.parse_arquivo
+
+    def parse_alterado(*args, **kwargs):
+        p = original(*args, **kwargs)
+        meses = [date(2026, 3, 1)] * 4 + [date(2026, 2, 1)] * 3
+        p.transacoes = [
+            t.model_copy(update={"mes_ref": m})
+            for t, m in zip(p.transacoes, meses, strict=True)
+        ]
+        return p
+
+    monkeypatch.setattr(mod, "parse_arquivo", parse_alterado)
+    nome = "nubank_2026-02-16.csv"
+    pipe, drive = _pipe_arquivo(FakePlanilha(), {nome: csv_nubank})
+    pipe.ciclo()
+    assert drive.pastas == ["2026-03"]
+
+
+def test_falha_ao_mover_mantem_ok_e_anota_erro(csv_nubank):
+    nome = "nubank_2026-02-16.csv"
+    planilha = FakePlanilha()
+    pipe, drive = _pipe_arquivo(
+        planilha, {nome: csv_nubank}, falha_mover=PermissionError("sem acesso")
+    )
+    [res] = pipe.ciclo()
+    esperado = "não foi possível arquivar (PermissionError); o arquivo ficou em input"
+    assert res.status == "ok" and res.erro == esperado
+    assert planilha.importacoes[0][9] == "ok"
+    assert planilha.importacoes[0][10] == esperado
+    assert len(planilha.lancamentos) == 7
+
+
+def test_falha_ao_criar_pasta_anota_erro(csv_nubank):
+    nome = "nubank_2026-02-16.csv"
+    pipe, drive = _pipe_arquivo(
+        FakePlanilha(), {nome: csv_nubank}, falha_pasta=RuntimeError("sem cota")
+    )
+    [res] = pipe.ciclo()
+    assert res.status == "ok" and "arquivar (RuntimeError)" in res.erro
+    assert drive.movidos == []

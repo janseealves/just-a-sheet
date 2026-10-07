@@ -39,11 +39,16 @@ A conta de serviço do Google fica em `/just-a-sheet/service-account.json` no se
 |---|---|---|
 | `SPREADSHEET_ID` | sim | |
 | `DRIVE_FOLDER_ID` | sim | |
+| `ARCHIVE_FOLDER_ID` | não | vazio = não arquiva |
 | `GOOGLE_APPLICATION_CREDENTIALS` | sim | `/run/secrets/google-sa.json` |
 | `LLM_BASE_URL` | não | `https://ollama.com/v1` |
 | `LLM_API_KEY` | sim | |
 | `LLM_MODEL` | não | `gpt-oss:20b` |
 | `POLL_SECONDS` | não | `600` |
 | `TZ` | não | `America/Sao_Paulo` |
+
+Se `ARCHIVE_FOLDER_ID` (pasta `files` no Drive) estiver definida, cada arquivo importado
+com sucesso é movido para a subpasta `AAAA-MM` dela; a conta de serviço precisa ser editora
+das duas pastas. Falha ao arquivar não afeta a importação (fica anotada em Importações).
 
 Veja `.env.example`.

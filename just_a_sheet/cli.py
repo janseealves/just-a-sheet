@@ -22,8 +22,13 @@ def _construir_pipeline():
     s = Settings()  # type: ignore[call-arg]  # vem do ambiente
     pipeline = Pipeline(
         planilha=PlanilhaGspread(s.spreadsheet_id, s.google_application_credentials),
-        drive=DriveGoogle(s.drive_folder_id, s.google_application_credentials),
+        drive=DriveGoogle(
+            s.drive_folder_id,
+            s.google_application_credentials,
+            s.archive_folder_id,
+        ),
         llm=ClassificadorLLM.criar(s.llm_base_url, s.llm_api_key, s.llm_model),
+        arquivar=bool(s.archive_folder_id),
     )
     return pipeline, s
 
@@ -60,6 +65,8 @@ def cmd_once(args: argparse.Namespace) -> int:
         if args.dry_run:
             print(f"  já existentes na planilha: {r.ja_existentes}")
             print(f"  seriam novas: {r.linhas_novas}")
+            if r.arquivaria_em:
+                print(f"  arquivaria em {r.arquivaria_em}")
             for t in r.novas:
                 print(
                     f"  {t.data} {t.valor:>10} {t.categoria:<24} "

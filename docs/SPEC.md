@@ -22,9 +22,25 @@ a cada POLL_SECONDS:
       transacoes = parser[tipo](bytes, nome)
       descartar transacoes com mes_ref < inicio_dados (Config) e ids já na planilha
       classificar: Regras -> conciliação do pagamento da fatura -> LLM (o que sobrou)
-      gravar em Lançamentos (append) e registrar em Importações
+      gravar em Lançamentos (append)
+      se status "ok", não é --dry-run e ARCHIVE_FOLDER_ID está definida: arquivar o arquivo (§1.1)
+      registrar em Importações
   erros de um arquivo não derrubam o loop: vão para Importações (status "erro")
 ```
+
+### 1.1 Arquivamento
+
+- Só arquivos `ok` (nunca `ignorado`/`erro`), fora do `--dry-run`, e com `ARCHIVE_FOLDER_ID` definida.
+- Mês `AAAA-MM` = `mes_ref` mais frequente entre as transações parseadas do arquivo (todas,
+  antes do filtro de `inicio_dados` e do dedup; na fatura Nubank é o `mes_ref` da fatura).
+  Arquivo sem transações não é arquivado.
+- A subpasta é buscada por nome dentro de `ARCHIVE_FOLDER_ID`; se não existir, tenta criar
+  (a conta de serviço não tem cota no Drive, então a criação pode falhar).
+- Move com `files.update(addParents=<subpasta>, removeParents=DRIVE_FOLDER_ID)`, sem renomear.
+- O arquivamento acontece antes de gravar a linha de Importações, para a nota entrar nela.
+- Falha de arquivamento não muda o status (continua `ok`): warning no log e, no campo `erro`
+  de Importações, `não foi possível arquivar (<TipoDoErro>); o arquivo ficou em input`.
+- `--dry-run` imprime `arquivaria em files/AAAA-MM` por arquivo, sem chamar a API.
 
 ## 2. Contrato com a planilha (já existe; não criar nem alterar estrutura)
 
@@ -238,6 +254,7 @@ de alguma fatura Nubank (do lote atual ou das linhas Nubank já na planilha, tot
 |---|---|---|
 | `SPREADSHEET_ID` | sim | |
 | `DRIVE_FOLDER_ID` | sim | |
+| `ARCHIVE_FOLDER_ID` | não | vazio = não arquiva |
 | `GOOGLE_APPLICATION_CREDENTIALS` | sim | `/run/secrets/google-sa.json` |
 | `LLM_BASE_URL` | não | `https://ollama.com/v1` |
 | `LLM_API_KEY` | sim | |
@@ -245,7 +262,7 @@ de alguma fatura Nubank (do lote atual ou das linhas Nubank já na planilha, tot
 | `POLL_SECONDS` | não | `600` |
 | `TZ` | não | `America/Sao_Paulo` |
 
-Credencial Google: conta de serviço (JSON), escopos `drive.readonly` e `spreadsheets`.
+Credencial Google: conta de serviço (JSON), escopos `drive` (precisa mover arquivos) e `spreadsheets`.
 Bibliotecas: `google-api-python-client` + `google-auth` para o Drive, `gspread` para o Sheets.
 
 ## 8. CLI (`[project.scripts] just-a-sheet = "just_a_sheet.cli:main"`)
@@ -325,6 +342,9 @@ fakes em memória.
    - Regras: normalização, início de palavra (`Raia` × `Cantinapraia`), origem, primeira vence;
    - conciliação ±R$ 1,00;
    - LLM: resposta válida, categoria inválida → Outros/0, falha → Outros/0 + erro;
+   - arquivamento (fakes): move quando `ok`; não move em `ignorado`/`erro`/`--dry-run`;
+     escolhe o mês mais frequente; falha ao mover mantém `ok` e anota em `erro`;
+     `ARCHIVE_FOLDER_ID` vazio não arquiva;
    - pipeline com fakes: arquivo já processado é pulado; ids existentes não são regravados;
      `mes_ref < inicio_dados` é descartado; Bradesco CSV vira `ignorado`; escreve só A:K;
      `--dry-run` não escreve.

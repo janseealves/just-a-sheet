@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     spreadsheet_id: str
     drive_folder_id: str
     google_application_credentials: str = "/run/secrets/google-sa.json"
+    archive_folder_id: str = ""  # vazia = não arquiva
     llm_base_url: str = "https://ollama.com/v1"
     llm_api_key: str
     llm_model: str = "gpt-oss:20b"

@@ -1,6 +1,7 @@
 """Orquestra um ciclo de importação (Drive -> parse -> classificação -> planilha)."""
 
 import logging
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
@@ -41,6 +42,8 @@ class Planilha(Protocol):
 class Drive(Protocol):
     def listar(self) -> list[ArquivoDrive]: ...
     def baixar(self, file_id: str) -> bytes: ...
+    def pasta_do_mes(self, nome: str) -> str: ...
+    def mover(self, file_id: str, destino_id: str) -> None: ...
 
 
 class LLM(Protocol):
@@ -72,7 +75,9 @@ class Pipeline:
         drive: Drive,
         llm: LLM,
         agora: Callable[[], datetime] = _agora_padrao,
+        arquivar: bool = False,
     ):
+        self.arquivar = arquivar
         self.planilha = planilha
         self.drive = drive
         self.llm = llm
@@ -144,6 +149,8 @@ class Pipeline:
                 self._marcar_erro(res, exc)
                 res.novas = []
                 res.linhas_novas = 0
+            if self.arquivar and res.status == "ok":
+                self._arquivar(res, parseado, dry_run)
             self._finalizar(res, dry_run)
             resultados.append(res)
         return resultados
@@ -234,6 +241,35 @@ class Pipeline:
                 f"LLM indisponível; {retorno.falhas} lançamentos ficaram em "
                 f"{CATEGORIA_PADRAO}"
             )
+
+    def _arquivar(
+        self, res: ResultadoImportacao, parseado: ArquivoParseado, dry_run: bool
+    ) -> None:
+        """Move o arquivo para ARCHIVE/AAAA-MM (mês mais frequente do arquivo).
+
+        Falha aqui nunca muda o status: só anota em Importações (campo erro).
+        """
+        if not parseado.transacoes:
+            return
+        contagem = Counter(t.mes_ref for t in parseado.transacoes)
+        # mais frequente; empate -> o mês mais antigo
+        mes = min(contagem, key=lambda m: (-contagem[m], m))
+        nome_pasta = f"{mes:%Y-%m}"
+        if dry_run:
+            res.arquivaria_em = f"files/{nome_pasta}"
+            return
+        try:
+            destino = self.drive.pasta_do_mes(nome_pasta)
+            self.drive.mover(res.drive_file_id, destino)
+        except Exception as exc:
+            log.warning(
+                "não foi possível arquivar %s (%s)", res.arquivo, type(exc).__name__
+            )
+            nota = (
+                f"não foi possível arquivar ({type(exc).__name__}); "
+                "o arquivo ficou em input"
+            )
+            res.erro = f"{res.erro}; {nota}" if res.erro else nota
 
     # ----------------------------------------------------------------- saída
 

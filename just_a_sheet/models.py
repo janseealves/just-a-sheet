@@ -128,3 +128,5 @@ class ResultadoImportacao(BaseModel):
     status: str = "ok"  # ok | erro | ignorado
     erro: str = ""
     novas: list[Transacao] = Field(default_factory=list)
+    # dry-run: destino em que o arquivo seria arquivado (ex.: "files/2026-02")
+    arquivaria_em: str = ""
