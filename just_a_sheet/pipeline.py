@@ -188,6 +188,9 @@ class Pipeline:
         sobra = [t for t in novas if not t.categoria]
         if sobra:
             self._classificar_llm(res, sobra, categorias, exemplos)
+        for t in novas:  # a descrição nunca fica vazia
+            if not t.descricao.strip():
+                t.descricao = t.descricao_original
 
         res.novas = novas
         res.linhas_novas = len(novas)
@@ -229,12 +232,12 @@ class Pipeline:
                 continue
             t.categoria = item.categoria
             t.confianca = item.confianca
-            if item.descricao_limpa:
+            limpa = item.descricao_limpa.strip()
+            if limpa:
                 t.descricao = (
-                    f"Estorno {item.descricao_limpa}"
-                    if t.estorno_de
-                    and not item.descricao_limpa.lower().startswith("estorno")
-                    else item.descricao_limpa
+                    f"Estorno {limpa}"
+                    if t.estorno_de and not limpa.lower().startswith("estorno")
+                    else limpa
                 )
         if retorno.falhas:
             res.erro = (

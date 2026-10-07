@@ -74,13 +74,10 @@ def test_resposta_valida():
     ]
     assert r.itens[1].confianca == 1.0  # clamp em 0..1
     chamada = client.chamadas[0]
-    assert chamada["response_format"]["type"] == "json_schema"
-    enum = chamada["response_format"]["json_schema"]["schema"]["properties"]["itens"][
-        "items"
-    ]["properties"]["categoria"]["enum"]
-    assert enum == ["Alimentação", "Compras", "Outros"]
+    assert chamada["response_format"] == {"type": "json_object"}
     prompt = chamada["messages"][0]["content"]
     assert "padarias" in prompt and "PADARIA X -> Alimentação" in prompt
+    assert "Responda SOMENTE com JSON" in prompt  # formato descrito no prompt
     # só os 4 campos permitidos vão para o provedor
     enviado = json.loads(chamada["messages"][1]["content"].split("\n", 1)[1])
     assert set(enviado[0]) == {"indice", "descricao_original", "valor", "origem"}
@@ -113,28 +110,56 @@ def test_falha_de_rede_vira_outros_com_retentativas():
     assert dormiu == [2, 4]  # backoff
 
 
-def test_json_schema_rejeitado_cai_para_json_object():
+def _resposta_texto(texto: str) -> SimpleNamespace:
+    msg = SimpleNamespace(content=texto)
+    return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
+
+
+def test_resposta_com_cerca_markdown():
+    corpo = json.dumps(
+        {
+            "itens": [
+                {
+                    "indice": 0,
+                    "categoria": "Compras",
+                    "descricao_limpa": "Loja 0",
+                    "confianca": 0.9,
+                }
+            ]
+        }
+    )
+    cerca = "`" * 3
+    for texto in (
+        f"{cerca}json\n{corpo}\n{cerca}",
+        f"{cerca}\n{corpo}\n{cerca}\n",
+        f"  {cerca}JSON\n{corpo}{cerca}",
+        corpo,  # sem cerca
+    ):
+        client = FakeClient([_resposta_texto(texto)])
+        r = _llm(client).classificar(_itens(1), CATEGORIAS)
+        assert r.falhas == 0
+        assert (r.itens[0].categoria, r.itens[0].descricao_limpa) == (
+            "Compras",
+            "Loja 0",
+        )
+
+
+def test_bad_request_nao_tenta_json_schema_e_vira_falha():
     rejeicao = openai.BadRequestError(
         "sem suporte", response=httpx.Response(400, request=REQ), body=None
     )
-    ok = _resposta(
-        [
-            {
-                "indice": 0,
-                "categoria": "Compras",
-                "descricao_limpa": "L",
-                "confianca": 0.5,
-            }
-        ]
-    )
-    client = FakeClient([rejeicao, ok])
+    client = FakeClient([rejeicao])
+    r = _llm(client).classificar(_itens(2), CATEGORIAS)
+    assert len(client.chamadas) == 1  # sem segunda tentativa com outro formato
+    assert client.chamadas[0]["response_format"] == {"type": "json_object"}
+    assert r.falhas == 2
+    assert [i.categoria for i in r.itens] == ["Outros", "Outros"]
+
+
+def test_json_valido_mas_sem_descricao_limpa_nao_quebra():
+    client = FakeClient([_resposta([{"indice": 0, "categoria": "Compras"}])])
     r = _llm(client).classificar(_itens(1), CATEGORIAS)
-    assert [c["response_format"]["type"] for c in client.chamadas] == [
-        "json_schema",
-        "json_object",
-    ]
-    assert "Responda SOMENTE com JSON" in client.chamadas[1]["messages"][0]["content"]
-    assert r.itens[0].categoria == "Compras"
+    assert (r.itens[0].categoria, r.itens[0].descricao_limpa) == ("Compras", "")
 
 
 def test_json_quebrado_conta_como_falha():

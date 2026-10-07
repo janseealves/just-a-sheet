@@ -13,7 +13,7 @@ from just_a_sheet.models import (
     ResultadoLLM,
 )
 from just_a_sheet.pipeline import Pipeline
-from tests.conftest import make_pdf
+from tests.conftest import make_extrato_pdf
 
 CATEGORIAS = [
     Categoria(nome=n, tipo="despesa")
@@ -206,18 +206,24 @@ def test_dry_run_nao_escreve(csv_nubank):
 
 
 def _pdf_bradesco(valor_debito="139,90", saldo="860,10") -> bytes:
-    return make_pdf(
+    return make_extrato_pdf(
         [
-            "Bradesco Celular",
-            "Extrato de: Agencia: 0000 | Conta: 0000000-0",
-            "Data Histórico Docto. Crédito (R$) Débito (R$) Saldo (R$)",
-            "31/01/2026 COD. LANC. 0 0,00 1.000,00",
-            "05/02/2026 PAGTO ELETRON COBRANCA",
-            f"NUBANK 0000099 {valor_debito} {saldo}",
-            "06/02/2026 PIX ENVIADO DES: FULANO DE TAL 06/02 1000009 20,10 840,00",
-            "Total 0,00 160,00 840,00",
+            {
+                "itens": [
+                    ("cod", "31/01/2026", "1.000,00"),
+                    (
+                        "lanc", "05/02/2026", ["PAGTO ELETRON COBRANCA", "NUBANK"],
+                        "0000099", "d", valor_debito, saldo,
+                    ),
+                    (
+                        "lanc", "06/02/2026", ["PIX ENVIADO", "DES: FULANO DE TAL 06/02"],
+                        "1000009", "d", "20,10", "840,00",
+                    ),
+                    ("total", "0,00", "160,00", "840,00"),
+                ]
+            }
         ]
-    )
+    )  # fmt: skip
 
 
 def test_conciliacao_no_mesmo_lote_independe_da_ordem(csv_nubank):
@@ -408,3 +414,29 @@ def test_falha_ao_criar_pasta_anota_erro(csv_nubank):
     [res] = pipe.ciclo()
     assert res.status == "ok" and "arquivar (RuntimeError)" in res.erro
     assert drive.movidos == []
+
+
+class LLMSemDescricao:
+    def classificar(self, itens, categorias, exemplos):
+        return ResultadoLLM(
+            itens=[
+                ItemClassificado(
+                    indice=i.indice, categoria="Compras", descricao_limpa="  ",
+                    confianca=0.5,
+                )
+                for i in itens
+            ]
+        )  # fmt: skip
+
+
+def test_descricao_nunca_fica_vazia(csv_nubank):
+    for llm in (LLMSemDescricao(), LLMQuebrado()):
+        planilha = FakePlanilha()
+        pipe, _ = _pipe(planilha, {"nubank_2026-02-16.csv": csv_nubank}, llm)
+        [res] = pipe.ciclo()
+        assert res.status == "ok"
+        assert planilha.lancamentos
+        for linha in planilha.lancamentos:
+            assert linha[2].strip()  # coluna C (descricao)
+        gringa = next(n for n in res.novas if n.descricao_original == "Loja Gringa Sub")
+        assert gringa.descricao == "Loja Gringa Sub"

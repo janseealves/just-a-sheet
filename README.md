@@ -31,6 +31,9 @@ Push na branch `prd` dispara `.github/workflows/deploy.yml`, que roda num runner
 self-hosted ARM64, copia `/just-a-sheet/.env` e sobe o `docker-compose.yml`.
 Simulação: em Actions → Deploy → Run workflow (`workflow_dispatch`) roda
 `once --dry-run` no servidor, lendo Drive/planilha/LLM sem gravar nada e sem subir o serviço.
+**O log do Actions é público** (repositório público), então a saída da simulação não
+aparece nele: vai para `/just-a-sheet/dry-run.log` no servidor (leia lá, por SSH) e o log
+mostra só "concluída" ou "falhou". Nenhum workflow deve imprimir dados de transações.
 A conta de serviço do Google fica em `/just-a-sheet/service-account.json` no servidor.
 
 ## Variáveis de ambiente

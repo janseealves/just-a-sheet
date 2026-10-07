@@ -32,4 +32,9 @@ jobs:
         run: |
           cp /just-a-sheet/.env .env
           docker compose -f docker-compose.yml build importer
-          docker compose -f docker-compose.yml run --rm importer just-a-sheet once --dry-run
+          # Repositório público => log de Actions público. A saída da simulação traz
+          # dados de transações, então vai para um arquivo no servidor (o redirecionamento
+          # é feito pelo shell do runner, fora do container); o log só mostra o resultado.
+          docker compose -f docker-compose.yml run --rm importer just-a-sheet once --dry-run > /just-a-sheet/dry-run.log 2>&1 \
+            && echo "Simulação concluída. Resultado em /just-a-sheet/dry-run.log no servidor." \
+            || { echo "Simulação falhou. Detalhes em /just-a-sheet/dry-run.log no servidor."; exit 1; }

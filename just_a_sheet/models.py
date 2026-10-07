@@ -36,7 +36,7 @@ class Transacao(BaseModel):
         return [
             self.data.isoformat(),
             self.mes_ref.isoformat(),
-            self.descricao,
+            self.descricao.strip() or self.descricao_original,
             float(self.valor),
             self.categoria,
             self.origem,

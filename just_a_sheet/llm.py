@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -29,7 +30,6 @@ _ERROS_TEMPORARIOS = (
     openai.RateLimitError,
     openai.InternalServerError,
 )
-_ERROS_FORMATO = (openai.BadRequestError, openai.UnprocessableEntityError)
 
 
 class LLMIndisponivel(Exception):
@@ -81,31 +81,13 @@ def montar_prompt(
     ]
 
 
-def _schema(categorias: list[Categoria]) -> dict[str, Any]:
-    return {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["itens"],
-        "properties": {
-            "itens": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["indice", "categoria", "descricao_limpa", "confianca"],
-                    "properties": {
-                        "indice": {"type": "integer"},
-                        "categoria": {
-                            "type": "string",
-                            "enum": [c.nome for c in categorias],
-                        },
-                        "descricao_limpa": {"type": "string"},
-                        "confianca": {"type": "number"},
-                    },
-                },
-            }
-        },
-    }
+_RE_CERCA = re.compile(r"^\s*```[\w-]*\s*\n(.*?)\n?```\s*$", re.DOTALL)
+
+
+def extrair_json(bruto: str) -> str:
+    """Tira a cerca markdown (```json ... ```) que alguns modelos põem na resposta."""
+    achou = _RE_CERCA.match(bruto)
+    return (achou[1] if achou else bruto).strip()
 
 
 class ClassificadorLLM:
@@ -146,24 +128,12 @@ class ClassificadorLLM:
         categorias: list[Categoria],
         exemplos: list[tuple[str, str]],
     ) -> str:
-        try:
-            return self._criar(
-                montar_prompt(itens, categorias, exemplos, descrever_schema=False),
-                {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "classificacao",
-                        "strict": True,
-                        "schema": _schema(categorias),
-                    },
-                },
-            )
-        except _ERROS_FORMATO:
-            # Provedor sem suporte a json_schema: repete com json_object.
-            return self._criar(
-                montar_prompt(itens, categorias, exemplos, descrever_schema=True),
-                {"type": "json_object"},
-            )
+        # Só json_object: alguns provedores (ex.: Ollama Cloud) aceitam json_schema
+        # com HTTP 200 mas ignoram o schema. O formato vai descrito no prompt.
+        return self._criar(
+            montar_prompt(itens, categorias, exemplos, descrever_schema=True),
+            {"type": "json_object"},
+        )
 
     def _chamar_com_retentativas(self, *args: Any) -> str:
         for tentativa in range(NOVAS_TENTATIVAS + 1):
@@ -192,7 +162,7 @@ class ClassificadorLLM:
             lote = itens[inicio : inicio + TAMANHO_LOTE]
             try:
                 bruto = self._chamar_com_retentativas(lote, categorias, exemplos)
-                saida = _Saida.model_validate_json(bruto)
+                saida = _Saida.model_validate_json(extrair_json(bruto))
             except (LLMIndisponivel, ValidationError) as exc:
                 log.warning("LLM indisponível para um lote (%s)", type(exc).__name__)
                 resultado.falhas += len(lote)

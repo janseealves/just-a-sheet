@@ -159,41 +159,50 @@ date,title,amount
 
 ### 5.2 Extrato Bradesco (PDF, layout "Bradesco Celular")
 
-Extrair texto com `pdfplumber` (`page.extract_text()`), página a página, juntando as linhas.
-Linhas de cabeçalho/rodapé a descartar: começam com `Bradesco Celular`, `Data:`,
-`Extrato de:`, `Data Histórico`, ou contêm `Folha:`. **Nunca** guardar nem logar o
+**Usar a posição das palavras, não o texto corrido.** Cada lançamento tem até duas linhas
+de texto na coluna Histórico (ex.: `PIX QR CODE DINAMICO` e, embaixo, `DES: NOME 06/10`) e
+as colunas Docto./Crédito/Débito/Saldo ficam **centralizadas na vertical** entre elas.
+`page.extract_text()` põe então os números ora com a linha de cima, ora com a de baixo
+(dependendo da página) e o nome de cada Pix cairia no lançamento seguinte. Por isso o
+parser usa `page.extract_words()` (`x0`, `x1`, `top`, `bottom`), página a página.
+
+Linhas de cabeçalho/rodapé: tudo acima da linha de cabeçalho da tabela
+(`Data Histórico Docto. Crédito (R$) Débito (R$) Saldo (R$)`) é descartado (título,
+`Extrato de:`, `Data:`, `Folha:`, `Últimos Lancamentos`). **Nunca** guardar nem logar o
 conteúdo dessas linhas (têm nome do titular, agência e conta).
 
-Exemplo **fictício** do texto extraído (estrutura real, dados inventados):
+Algoritmo:
+1. **Colunas** pelos cabeçalhos: Histórico (`x0` de "Histórico"), Docto. (`x0` de
+   "Docto.") e valores (`x0` de "Crédito"). Palavras à esquerda do Histórico = coluna
+   Data; entre Histórico e Docto. = texto; à direita = docto e valores.
+2. **Linhas de valores:** as palavras da zona numérica são agrupadas por `top`. Em cada
+   grupo, o inteiro à esquerda das colunas de valores é o `docto` e os números
+   `-?[\d.]+,\d{2}` ordenados por `x1` são `[valor, saldo]` (ou `[crédito, débito, saldo]`
+   na linha `Total`; `COD. LANC.` usa o último). A linha com a palavra `Total` na coluna
+   Data é a linha de total.
+3. **Atribuição:** cada linha de texto da coluna Histórico e cada data da coluna Data vai
+   para a linha de valores cujo centro vertical (`(top+bottom)/2`) está **mais próximo**
+   do dela. Fragmentos a mais de 14 pt de qualquer linha são ignorados (aviso no log, sem
+   o texto). A data vale até a próxima data; lançamentos sem data herdam a anterior.
+4. Texto do lançamento = fragmentos em ordem vertical, unidos por espaço, sem o `dd/mm`
+   final (data do Pix).
+
+Exemplo **fictício** do texto que `extract_text` devolveria **para as páginas com os valores
+centralizados** (note que a linha dos números fica entre as duas linhas do histórico):
 
 ```
 Data Histórico Docto. Crédito (R$) Débito (R$) Saldo (R$)
-31/12/2025 COD. LANC. 0 0,00 100,00
-02/01/2026 PIX QR CODE DINAMICO
-DES: PADARIA EXEMPLO LTDA 02/01 1000001 4,10 95,90
-05/01/2026 PIX RECEBIDO
-REM: EMPRESA EXEMPLO SA 05/01 1000002 5.000,00 5.095,90
-PIX QR CODE DINAMICO DES: MERCADO EXEMPLO 04/01 1000003 61,30 5.034,60
-06/01/2026 RENTAB.INVEST FACILCRED* 0000003 0,01 5.034,61
-PAGTO ELETRON COBRANCA IMOBILIARIA EXEMPLO ADM 0000011 2.000,00 3.034,61
-APLICACAO CDB 1000004 1.000,00 2.034,61
-PIX ENVIADO DES: FULANO DE TAL 06/01 1000005 43,49 1.991,12
-31/01/2026 PAGTO ELETRON COBRANCA
-SEGURADORA EXEMPLO 0000012 27,40 1.963,72
+31/12/2025 COD. LANC. 0 100,00
+PIX QR CODE DINAMICO
+02/01/2026 1000001 4,10 95,90
+DES: PADARIA EXEMPLO LTDA 02/01
+PIX RECEBIDO
+05/01/2026 1000002 5.000,00 5.095,90
+REM: EMPRESA EXEMPLO SA 05/01
 Total 5.000,01 3.136,29 1.963,72
-Últimos Lancamentos
-31/01/2026 COD. LANC. 0 1.963,72
-03/02/2026 PIX QR CODE DINAMICO DES: PADARIA EXEMPLO LTDA 03/02 1000006 6,20 1.957,52
-Total 0,00 6,20 1.957,52
 ```
 
 Regras do parser:
-- Uma linha **completa** termina com `docto valor saldo`:
-  regex de cauda `(?:(\d{2}/\d{2})\s+)?(\d+)\s+([\d.]+,\d{2})\s+(-?[\d.]+,\d{2})$`
-  (o `dd/mm` opcional é a data do Pix; descartar).
-- Linha que começa com `dd/mm/aaaa` define a data corrente. Se não tem cauda, o resto da
-  linha vai para um buffer de histórico; a próxima linha com cauda completa a transação.
-  Linha sem data e sem cauda → também acumula no buffer.
 - `COD. LANC. 0`: não é transação; só define o saldo inicial (o último número da linha).
 - **Sinal pelo saldo:** `saldo_atual - saldo_anterior` deve ser `+valor` (crédito) ou
   `-valor` (débito), com tolerância de R$ 0,005. Se não for nenhum dos dois →
@@ -238,9 +247,13 @@ de alguma fatura Nubank (do lote atual ou das linhas Nubank já na planilha, tot
 - Prompt em português com: lista de categorias (nome, tipo, dica) e até 30 exemplos
   recentes de linhas `revisado = TRUE` da planilha (`descricao_original → categoria`),
   como few-shot.
-- Saída estruturada: tentar `response_format={"type": "json_schema", ...}` com `categoria`
-  como `enum` das categorias da planilha; se o provedor rejeitar, repetir com
-  `{"type": "json_object"}` e o schema descrito no prompt. Sempre validar com pydantic.
+- Saída estruturada: **só** `response_format={"type": "json_object"}`, com o formato
+  `{"itens": [{"indice": 0, "categoria": "...", "descricao_limpa": "...", "confianca": 0.9}]}`
+  descrito no prompt. Não usar `json_schema`: o Ollama Cloud responde HTTP 200 e ignora o
+  schema (veio só `"Mercado"`), o que derrubava o lote inteiro em `Outros`. Aceitar a
+  resposta envolta em cercas markdown (três crases + `json`) e sempre validar com pydantic.
+- A `descricao` gravada nunca fica vazia: sem `descricao_limpa` (LLM falhou ou omitiu), usa
+  a `descricao_original`.
 - Por item: `indice`, `categoria`, `descricao_limpa` (curta, legível), `confianca` (0..1).
 - Item com categoria fora da lista ou ausente → `Outros`, `confianca = 0`.
 - Resultado LLM: `revisado = False`.
@@ -290,7 +303,7 @@ just_a_sheet/
   parsers/
     __init__.py     # detectar_tipo(nome, bytes)
     nubank.py
-    bradesco_pdf.py # parse_texto(texto) + parse_pdf(bytes) (pdfplumber -> parse_texto)
+    bradesco_pdf.py # parse_pdf(bytes): pdfplumber extract_words -> parse_palavras(páginas)
   rules.py
   reconcile.py
   llm.py
@@ -320,6 +333,17 @@ fakes em memória.
   `runs-on: [self-hosted, linux, ARM64, just-a-sheet]`; passos: checkout,
   `cp /just-a-sheet/.env .env`, `docker compose -f docker-compose.yml up -d --build --remove-orphans`,
   `docker image prune -f`.
+- `deploy.yml` também tem o job `dry-run` (`workflow_dispatch`), que faz o build e roda
+  `just-a-sheet once --dry-run` sem subir o serviço. **Logs de Actions de repositório
+  público são públicos: nenhum workflow pode imprimir dados de transações.** O job
+  redireciona toda a saída do comando para `/just-a-sheet/dry-run.log` (no servidor; o
+  redirecionamento é feito pelo shell do runner, fora do container, que roda com o UID do
+  dono da pasta) e o log mostra só "Simulação concluída/falhou" com o caminho do arquivo:
+  ```
+  docker compose -f docker-compose.yml run --rm importer just-a-sheet once --dry-run > /just-a-sheet/dry-run.log 2>&1 \
+    && echo "Simulação concluída. Resultado em /just-a-sheet/dry-run.log no servidor." \
+    || { echo "Simulação falhou. Detalhes em /just-a-sheet/dry-run.log no servidor."; exit 1; }
+  ```
 - `.github/workflows/ci.yml`: `on: [push, pull_request]`; **`runs-on: ubuntu-latest`**
   (nunca self-hosted em CI, o repositório é público); `uv sync`, `uv run ruff check`,
   `uv run pytest`.
@@ -336,9 +360,12 @@ fakes em memória.
    - parse de valores pt-BR (`"12,50"`, `"- 2.870,40"`, `"1.000,00"`);
    - Nubank: sinal, parcela, IOF, estorno (categoria herdada de X), pagamento recebido,
      `n` de ocorrência para linhas idênticas, mes_ref pelo nome do arquivo e inferido;
-   - Bradesco: o texto-exemplo da §5.2 gera as transações certas (datas, sinais, valores,
-     `descricao_original`, ids), lê as duas seções, e **falha** quando um valor é alterado
-     de forma que o saldo não fecha e quando o Total não bate;
+   - Bradesco: um PDF **fictício gerado nos testes** com o layout da §5.2 (duas linhas de
+     histórico, números centralizados/na 1ª/na 2ª linha, lançamentos de uma linha, boleto com
+     o nome embaixo, três páginas, duas seções) gera as transações certas (datas, sinais,
+     valores, `descricao_original`, ids) e inclui um caso em que `extract_text` descasaria;
+     **falha** quando um valor é alterado de forma que o saldo não fecha e quando o Total
+     não bate;
    - Regras: normalização, início de palavra (`Raia` × `Cantinapraia`), origem, primeira vence;
    - conciliação ±R$ 1,00;
    - LLM: resposta válida, categoria inválida → Outros/0, falha → Outros/0 + erro;
