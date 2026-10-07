@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 
 
 def parse_valor_ptbr(texto: str) -> Decimal:
-    """Converte `"12,50"`, `"- 3.215,95"` ou `"1.000,00"` em Decimal.
+    """Converte `"12,50"`, `"- 2.870,40"` ou `"1.000,00"` em Decimal.
 
     Remove espaços e o `.` de milhar, troca `,` por `.`. O sinal `-` (possivelmente
     separado por espaço) é preservado.

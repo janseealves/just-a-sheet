@@ -16,20 +16,20 @@ def test_sinais_e_total(csv_nubank):
     r = parse_fatura(csv_nubank, "fatura.csv", 9)
     t = _por_titulo(r)
     assert t["Padaria Exemplo"].valor == Decimal("-12.50")  # compra = saída
-    assert t["Pagamento recebido"].valor == Decimal("3215.95")  # crédito = entrada
-    assert t['Estorno de "Mercado Online" (Mercado)'].valor == Decimal("32.54")
-    # total exclui "Pagamento recebido"; 12,50*2 + 4 + 114,55 - 32,54 + 69
-    assert r.total_fatura == Decimal("180.01")
+    assert t["Pagamento recebido"].valor == Decimal("2870.40")  # crédito = entrada
+    assert t['Estorno de "Mercado Online" (Mercado)'].valor == Decimal("45.10")
+    # total exclui "Pagamento recebido"; 12,50*2 + 3,50 + 98,20 - 45,10 + 58
+    assert r.total_fatura == Decimal("139.60")
 
 
 def test_parcela_iof_e_pagamento(csv_nubank):
     t = _por_titulo(parse_fatura(csv_nubank, "fatura.csv", 9))
-    roupa = t["Loja de Roupas - Parcela 4/10"]
-    assert roupa.parcela == "4/10"
+    roupa = t["Loja de Roupas - Parcela 2/6"]
+    assert roupa.parcela == "2/6"
     assert roupa.descricao == "Loja de Roupas"
     assert roupa.data == date(2026, 1, 1)  # data mantida como vem
     iof = t['IOF de "Loja Gringa Sub"']
-    assert iof.valor == Decimal("-4.00")
+    assert iof.valor == Decimal("-3.50")
     assert iof.estorno_de is None
     assert "Pagamento recebido" in t
 

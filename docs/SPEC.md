@@ -97,7 +97,7 @@ A coluna E da Config é fórmula da planilha — ignorar.
   - `valor` = valor **já com o sinal da planilha** (compra → negativo).
   - `n` = ocorrência (1, 2, …) da mesma tupla `(data, title, valor)` dentro do arquivo.
 - **Bradesco:** `chave = "bradesco|{data_iso}|{int(docto)}|{valor:.2f}"`
-  - `docto` sem zeros à esquerda (`0000067` → `67`). `valor` com sinal.
+  - `docto` sem zeros à esquerda (`0000011` → `11`). `valor` com sinal.
 
 Vetores de teste (fictícios, obrigatórios nos testes):
 
@@ -106,7 +106,7 @@ Vetores de teste (fictícios, obrigatórios nos testes):
 | `nubank\|2026-01-05\|Padaria Exemplo\|-12.50\|1` | `b937d3338efd` |
 | `nubank\|2026-01-05\|Padaria Exemplo\|-12.50\|2` | `0e46baa057ce` |
 | `bradesco\|2026-01-07\|1234567\|-45.90` | `84af0b36a645` |
-| `bradesco\|2026-01-07\|70\|1500.00` | `54614c14fbea` |
+| `bradesco\|2026-01-07\|1000007\|1500.00` | `6f418734ac92` |
 
 ## 5. Parsers
 
@@ -117,11 +117,11 @@ Formato (UTF-8, vírgula, valores pt-BR entre aspas):
 ```
 date,title,amount
 2026-01-12,Padaria Exemplo,"12,50"
-2026-01-10,"IOF de ""Loja Gringa Sub""","4,00"
-2026-01-10,Loja Gringa Sub,"114,55"
-2026-01-05,"Estorno de ""Mercado Online"" (Mercado)","- 232,54"
-2026-01-03,Pagamento recebido,"- 3.215,95"
-2026-01-01,Loja de Roupas - Parcela 4/10,"69,00"
+2026-01-10,"IOF de ""Loja Gringa Sub""","3,50"
+2026-01-10,Loja Gringa Sub,"98,20"
+2026-01-05,"Estorno de ""Mercado Online"" (Mercado)","- 45,10"
+2026-01-03,Pagamento recebido,"- 2.870,40"
+2026-01-01,Loja de Roupas - Parcela 2/6,"58,00"
 ```
 
 - `amount`: remover espaços, `.` de milhar, `,` → `.`; pode ter `- ` na frente.
@@ -154,21 +154,21 @@ Exemplo **fictício** do texto extraído (estrutura real, dados inventados):
 Data Histórico Docto. Crédito (R$) Débito (R$) Saldo (R$)
 31/12/2025 COD. LANC. 0 0,00 100,00
 02/01/2026 PIX QR CODE DINAMICO
-DES: PADARIA EXEMPLO LTDA 02/01 1924349 3,07 96,93
+DES: PADARIA EXEMPLO LTDA 02/01 1000001 4,10 95,90
 05/01/2026 PIX RECEBIDO
-REM: EMPRESA EXEMPLO SA 05/01 1608289 5.000,00 5.096,93
-PIX QR CODE DINAMICO DES: MERCADO EXEMPLO 04/01 1205332 53,45 5.043,48
-06/01/2026 RENTAB.INVEST FACILCRED* 0000002 0,01 5.043,49
-PAGTO ELETRON COBRANCA IMOBILIARIA EXEMPLO ADM 0000067 2.000,00 3.043,49
-APLICACAO CDB 2572034 1.000,00 2.043,49
-PIX ENVIADO DES: FULANO DE TAL 06/01 1300140 43,49 2.000,00
+REM: EMPRESA EXEMPLO SA 05/01 1000002 5.000,00 5.095,90
+PIX QR CODE DINAMICO DES: MERCADO EXEMPLO 04/01 1000003 61,30 5.034,60
+06/01/2026 RENTAB.INVEST FACILCRED* 0000003 0,01 5.034,61
+PAGTO ELETRON COBRANCA IMOBILIARIA EXEMPLO ADM 0000011 2.000,00 3.034,61
+APLICACAO CDB 1000004 1.000,00 2.034,61
+PIX ENVIADO DES: FULANO DE TAL 06/01 1000005 43,49 1.991,12
 31/01/2026 PAGTO ELETRON COBRANCA
-SEGURADORA EXEMPLO 0000070 31,88 1.968,12
-Total 5.000,01 3.131,89 1.968,12
+SEGURADORA EXEMPLO 0000012 27,40 1.963,72
+Total 5.000,01 3.136,29 1.963,72
 Últimos Lancamentos
-31/01/2026 COD. LANC. 0 1.968,12
-03/02/2026 PIX QR CODE DINAMICO DES: PADARIA EXEMPLO LTDA 03/02 1003078 5,54 1.962,58
-Total 0,00 5,54 1.962,58
+31/01/2026 COD. LANC. 0 1.963,72
+03/02/2026 PIX QR CODE DINAMICO DES: PADARIA EXEMPLO LTDA 03/02 1000006 6,20 1.957,52
+Total 0,00 6,20 1.957,52
 ```
 
 Regras do parser:
@@ -316,7 +316,7 @@ fakes em memória.
 1. `uv run pytest` passa; `uv run ruff check` limpo.
 2. Testes cobrem, com fixtures fictícias:
    - vetores de id da §4;
-   - parse de valores pt-BR (`"12,50"`, `"- 3.215,95"`, `"1.000,00"`);
+   - parse de valores pt-BR (`"12,50"`, `"- 2.870,40"`, `"1.000,00"`);
    - Nubank: sinal, parcela, IOF, estorno (categoria herdada de X), pagamento recebido,
      `n` de ocorrência para linhas idênticas, mes_ref pelo nome do arquivo e inferido;
    - Bradesco: o texto-exemplo da §5.2 gera as transações certas (datas, sinais, valores,

@@ -16,27 +16,27 @@ from tests.conftest import make_pdf
 ESPERADAS = [
     (
         date(2026, 1, 2),
-        "-3.07",
+        "-4.10",
         "PIX QR CODE DINAMICO DES: PADARIA EXEMPLO LTDA",
-        1924349,
+        1000001,
     ),
-    (date(2026, 1, 5), "5000.00", "PIX RECEBIDO REM: EMPRESA EXEMPLO SA", 1608289),
-    (date(2026, 1, 5), "-53.45", "PIX QR CODE DINAMICO DES: MERCADO EXEMPLO", 1205332),
-    (date(2026, 1, 6), "0.01", "RENTAB.INVEST FACILCRED*", 2),
+    (date(2026, 1, 5), "5000.00", "PIX RECEBIDO REM: EMPRESA EXEMPLO SA", 1000002),
+    (date(2026, 1, 5), "-61.30", "PIX QR CODE DINAMICO DES: MERCADO EXEMPLO", 1000003),
+    (date(2026, 1, 6), "0.01", "RENTAB.INVEST FACILCRED*", 3),
     (
         date(2026, 1, 6),
         "-2000.00",
         "PAGTO ELETRON COBRANCA IMOBILIARIA EXEMPLO ADM",
-        67,
+        11,
     ),
-    (date(2026, 1, 6), "-1000.00", "APLICACAO CDB", 2572034),
-    (date(2026, 1, 6), "-43.49", "PIX ENVIADO DES: FULANO DE TAL", 1300140),
-    (date(2026, 1, 31), "-31.88", "PAGTO ELETRON COBRANCA SEGURADORA EXEMPLO", 70),
+    (date(2026, 1, 6), "-1000.00", "APLICACAO CDB", 1000004),
+    (date(2026, 1, 6), "-43.49", "PIX ENVIADO DES: FULANO DE TAL", 1000005),
+    (date(2026, 1, 31), "-27.40", "PAGTO ELETRON COBRANCA SEGURADORA EXEMPLO", 12),
     (
         date(2026, 2, 3),
-        "-5.54",
+        "-6.20",
         "PIX QR CODE DINAMICO DES: PADARIA EXEMPLO LTDA",
-        1003078,
+        1000006,
     ),
 ]
 
@@ -61,7 +61,7 @@ def test_cabecalho_nao_vaza(texto_bradesco):
 
 
 def test_falha_quando_saldo_nao_fecha(texto_bradesco):
-    adulterado = texto_bradesco.replace("3,07 96,93", "3,08 96,93")
+    adulterado = texto_bradesco.replace("4,10 95,90", "4,11 95,90")
     with pytest.raises(ErroExtrato, match="saldo não fecha") as exc:
         parse_texto(adulterado)
     assert "TITULAR" not in str(exc.value)
@@ -69,12 +69,12 @@ def test_falha_quando_saldo_nao_fecha(texto_bradesco):
 
 def test_falha_quando_total_nao_bate(texto_bradesco):
     adulterado = texto_bradesco.replace(
-        "Total 5.000,01 3.131,89 1.968,12", "Total 5.000,01 3.131,90 1.968,12"
+        "Total 5.000,01 3.136,29 1.963,72", "Total 5.000,01 3.136,30 1.963,72"
     )
     with pytest.raises(ErroExtrato, match="total de débitos"):
         parse_texto(adulterado)
     adulterado = texto_bradesco.replace(
-        "Total 0,00 5,54 1.962,58", "Total 0,00 5,54 1.962,59"
+        "Total 0,00 6,20 1.957,52", "Total 0,00 6,20 1.957,53"
     )
     with pytest.raises(ErroExtrato, match="saldo final"):
         parse_texto(adulterado)

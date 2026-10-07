@@ -56,6 +56,15 @@ def _agora_padrao() -> datetime:
     return datetime.now(ZoneInfo("America/Sao_Paulo"))
 
 
+def _ja_processado(
+    arq: ArquivoDrive, processados: set[tuple[str, str]], ids_processados: set[str]
+) -> bool:
+    """Com md5, vale o par (id, md5); sem md5 (arquivo nativo do Google), só o id."""
+    if arq.md5:
+        return (arq.id, arq.md5) in processados
+    return arq.id in ids_processados
+
+
 class Pipeline:
     def __init__(
         self,
@@ -85,10 +94,11 @@ class Pipeline:
             if lanc.revisado and lanc.descricao_original and lanc.categoria
         ][-MAX_EXEMPLOS:]
 
+        ids_processados = {id_ for id_, _ in processados}
         pendentes = [
             a
             for a in sorted(self.drive.listar(), key=lambda a: a.nome)
-            if not (a.md5 and (a.id, a.md5) in processados)
+            if not _ja_processado(a, processados, ids_processados)
         ]
 
         resultados: list[ResultadoImportacao] = []

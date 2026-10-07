@@ -29,6 +29,8 @@ Arquivos reais para depuração ficam em `samples/` (ignorado pelo git).
 
 Push na branch `prd` dispara `.github/workflows/deploy.yml`, que roda num runner
 self-hosted ARM64, copia `/just-a-sheet/.env` e sobe o `docker-compose.yml`.
+Simulação: em Actions → Deploy → Run workflow (`workflow_dispatch`) roda
+`once --dry-run` no servidor, lendo Drive/planilha/LLM sem gravar nada e sem subir o serviço.
 A conta de serviço do Google fica em `/just-a-sheet/service-account.json` no servidor.
 
 ## Variáveis de ambiente

@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - prd
+  # Execução manual (Actions → Deploy → Run workflow): só simula, não faz deploy.
+  workflow_dispatch:
 concurrency:
   group: production
   cancel-in-progress: false
 jobs:
   deploy:
     name: Build & Deploy
+    if: github.event_name == 'push'
     runs-on: [self-hosted, linux, ARM64, just-a-sheet]
     steps:
       - uses: actions/checkout@v5
@@ -18,3 +21,15 @@ jobs:
           cp /just-a-sheet/.env .env
           docker compose -f docker-compose.yml up -d --build --remove-orphans
           docker image prune -f
+
+  dry-run:
+    name: Simulação (dry-run)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, ARM64, just-a-sheet]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build & simulação (não grava nada, não sobe o serviço)
+        run: |
+          cp /just-a-sheet/.env .env
+          docker compose -f docker-compose.yml build importer
+          docker compose -f docker-compose.yml run --rm importer uv run just-a-sheet once --dry-run

@@ -18,7 +18,7 @@ def test_id_bradesco_docto_com_e_sem_zeros():
     assert make_id_bradesco(date(2026, 1, 7), "1234567", Decimal("-45.90")) == (
         "84af0b36a645"
     )
-    assert make_id_bradesco(date(2026, 1, 7), "0000070", Decimal("1500.00")) == (
-        "54614c14fbea"
+    assert make_id_bradesco(date(2026, 1, 7), "01000007", Decimal("1500.00")) == (
+        "6f418734ac92"
     )
-    assert make_id_bradesco(date(2026, 1, 7), 70, 1500) == "54614c14fbea"
+    assert make_id_bradesco(date(2026, 1, 7), 1000007, 1500) == "6f418734ac92"

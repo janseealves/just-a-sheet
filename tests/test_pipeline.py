@@ -124,10 +124,10 @@ def test_fluxo_nubank(csv_nubank):
     por_desc = {linha[9]: linha for linha in planilha.lancamentos}
     estorno = por_desc['Estorno de "Mercado Online" (Mercado)']
     assert estorno[2] == "Estorno Mercado online"  # herdou a categoria de X
-    assert estorno[3] == 32.54 and estorno[4] == "Alimentação"
+    assert estorno[3] == 45.10 and estorno[4] == "Alimentação"
     assert estorno[7] is True and estorno[8] == 1.0
-    roupa = por_desc["Loja de Roupas - Parcela 4/10"]
-    assert roupa[6] == "'4/10" and roupa[7] is False and roupa[8] == 0.8
+    roupa = por_desc["Loja de Roupas - Parcela 2/6"]
+    assert roupa[6] == "'2/6" and roupa[7] is False and roupa[8] == 0.8
     assert roupa[1] == "2026-02-01" and roupa[0] == "2026-01-01"
     assert roupa[5] == "nubank"
     # Importações
@@ -205,7 +205,7 @@ def test_dry_run_nao_escreve(csv_nubank):
     assert planilha.lancamentos == [] and planilha.importacoes == []
 
 
-def _pdf_bradesco(valor_debito="180,50", saldo="819,50") -> bytes:
+def _pdf_bradesco(valor_debito="139,90", saldo="860,10") -> bytes:
     return make_pdf(
         [
             "Bradesco Celular",
@@ -214,8 +214,8 @@ def _pdf_bradesco(valor_debito="180,50", saldo="819,50") -> bytes:
             "31/01/2026 COD. LANC. 0 0,00 1.000,00",
             "05/02/2026 PAGTO ELETRON COBRANCA",
             f"NUBANK 0000099 {valor_debito} {saldo}",
-            "06/02/2026 PIX ENVIADO DES: FULANO DE TAL 06/02 1300140 19,50 800,00",
-            "Total 0,00 200,00 800,00",
+            "06/02/2026 PIX ENVIADO DES: FULANO DE TAL 06/02 1000009 20,10 840,00",
+            "Total 0,00 160,00 840,00",
         ]
     )
 
@@ -244,7 +244,7 @@ def test_conciliacao_no_mesmo_lote_independe_da_ordem(csv_nubank):
 
 def test_erro_de_um_arquivo_nao_derruba_os_outros(csv_nubank):
     planilha = FakePlanilha()
-    # saldo não fecha (180,50 debitado, mas saldo cai 100,00)
+    # saldo não fecha (139,90 debitado, mas saldo cai 100,00)
     quebrado = _pdf_bradesco(saldo="900,00")
     pipe, _ = _pipe(
         planilha,
@@ -287,3 +287,15 @@ def test_exemplos_few_shot_vem_dos_revisados(csv_nubank):
     exemplos = llm.chamadas[0][1]
     assert len(exemplos) == 30
     assert exemplos[-1] == ("D98", "Compras")
+
+
+def test_arquivo_sem_md5_processado_se_id_ja_registrado():
+    class DriveSemMd5(FakeDrive):
+        def listar(self):
+            return [ArquivoDrive(id="id-nativo", nome="Planilha.gsheet", md5="")]
+
+    drive = DriveSemMd5({})
+    # id já registrado (com qualquer md5): pulado, nem é baixado
+    planilha = FakePlanilha(processados={("id-nativo", "qualquer")})
+    assert Pipeline(planilha, drive, FakeLLM(), agora=lambda: AGORA).ciclo() == []
+    assert drive.baixados == [] and planilha.importacoes == []
