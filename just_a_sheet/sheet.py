@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Any
 
 import gspread
-from gspread.utils import InsertDataOption, ValueInputOption, ValueRenderOption
+from gspread.utils import ValueInputOption, ValueRenderOption
 
 from just_a_sheet.models import (
     Categoria,
@@ -164,18 +164,32 @@ class PlanilhaGspread:
             )
         return resultado
 
-    def _append(self, aba: str, linhas: list[list]) -> None:
+    def _append(self, aba: str, linhas: list[list], coluna_chave: int) -> None:
+        """Grava logo após a última linha com valor na coluna-chave (1-based).
+
+        Não usa `values.append`: a detecção de tabela da API é enganada por
+        validações (caixas de seleção) em linhas vazias.
+        """
         if not linhas:
             return
-        self._sh.worksheet(aba).append_rows(
-            linhas,
+        ws = self._sh.worksheet(aba)
+        valores = ws.col_values(coluna_chave)
+        ultima = max(
+            (n for n, v in enumerate(valores, start=1) if str(v).strip()),
+            default=1,
+        )
+        ini = max(ultima, 1) + 1
+        fim = ini + len(linhas) - 1
+        if fim > ws.row_count:
+            ws.add_rows(fim - ws.row_count)
+        ws.update(
+            range_name=f"A{ini}:K{fim}",
+            values=linhas,
             value_input_option=ValueInputOption.user_entered,
-            insert_data_option=InsertDataOption.overwrite,
-            table_range="A:K",
         )
 
     def append_lancamentos(self, linhas: list[list]) -> None:
-        self._append(ABA_LANCAMENTOS, linhas)
+        self._append(ABA_LANCAMENTOS, linhas, 11)
 
     def append_importacao(self, linha: list) -> None:
-        self._append(ABA_IMPORTACOES, [linha])
+        self._append(ABA_IMPORTACOES, [linha], 2)

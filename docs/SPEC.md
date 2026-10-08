@@ -65,12 +65,17 @@ e **só faz append** em Lançamentos e Importações.
 
 L (`tipo`) e M (`grupo`) são fórmulas `ARRAYFORMULA` no cabeçalho — **nunca escrever em L:M**.
 
-Escrita: `values.append` em `'Lançamentos'!A:K` com `valueInputOption=USER_ENTERED`,
-`insertDataOption=OVERWRITE`. A planilha está em locale pt_BR: datas vão como string
-ISO (o Sheets converte), números vão como número JSON (nunca string com vírgula),
-booleanos como booleano JSON.
+Escrita: não usa `values.append` (a detecção de tabela da API é enganada pela caixa de
+seleção da coluna H nas linhas vazias e grava no fim da grade). A próxima linha livre é
+1 + a última linha com valor não vazio na coluna K (`id`), lida com `col_values(11)`; só
+com o cabeçalho, é a linha 2. Grava com `worksheet.update("A{ini}:K{fim}")` e
+`valueInputOption=USER_ENTERED`; se `fim` passar de `row_count`, chama `add_rows` antes.
+A planilha está em locale pt_BR: datas vão como string ISO (o Sheets converte), números
+vão como número JSON (nunca string com vírgula), booleanos como booleano JSON.
 
 ### Importações (append em A:K)
+
+Mesma regra de escrita, usando a coluna B (`drive_file_id`) para achar a última linha.
 
 `arquivo | drive_file_id | md5 | tipo_arquivo | processado_em | linhas_lidas | linhas_novas | via_regras | via_llm | status | erro`
 
